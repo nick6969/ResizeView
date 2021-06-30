@@ -11,8 +11,9 @@ final class Before15TestVC: BaseTestVC {
     
     override func tapTest() {
         let vc = TestTableVC()
+        vc.delegate = self
         let nextVC = SheetContainVC(containerVC: vc)
-        present(nextVC, animated: false)
+        present(nextVC, animated: true)
     }
     
 }
@@ -40,7 +41,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
     private let dismissableOffset: CGFloat = 60
     private var dismissibleHeight: CGFloat { defaultHeight - dismissableOffset }
     private var maxContainerHeight: CGFloat {
-        return view.frame.height - view.safeAreaInsets.top - view.safeAreaInsets.bottom - 60
+        return view.frame.height - view.safeAreaInsets.top - 40
     }
     private var isMaxContainerHeight: Bool { currentContainerHeight == maxContainerHeight }
     private var needPullBackDefaultHeight: Bool = false
@@ -49,7 +50,6 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
     // MARK: - UI Property
 
     private var containerViewHeightConstraint: NSLayoutConstraint?
-    private var containerViewBottomConstraint: NSLayoutConstraint?
     private let indicatorView: UIView = {
         let view: UIView = UIView()
         view.backgroundColor = .init(netHex: 0xCAC9CF)
@@ -97,11 +97,6 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
         setupUI()
         setupGesture()
         registerNotification()
-    }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        animateShowScreen()
     }
 
     // MARK: - Action
@@ -161,9 +156,9 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
 
         containerVC.view
             .mLayChain(pin: .horizontal())
+            .mLayChain(.bottom, .equal, view)
 
         containerViewHeightConstraint = containerVC.view.mLay(.height, defaultHeight)
-        containerViewBottomConstraint = containerVC.view.mLay(.bottom, .equal, view, constant: currentContainerHeight)
     }
 
     private func setupGesture() {
@@ -174,7 +169,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
     @objc
     private func handleTapGesture(gesture: UITapGestureRecognizer) {
         guard allowTapToDismiss else { return }
-        animateDismissScreen()
+        dismiss(animated: true, completion: nil)
     }
 
     @objc
@@ -193,7 +188,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
             let isDraggingDown: Bool = translation.y > 0
 
             if newHeight < dismissibleHeight {
-                animateDismissScreen()
+                dismiss(animated: true, completion: nil)
             } else if newHeight < defaultHeight {
                 animateChangeContent(height: defaultHeight)
             } else if newHeight < maxContainerHeight && isDraggingDown {
@@ -224,35 +219,6 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
             self.view.layoutIfNeeded()
         }
         currentContainerHeight = height
-
-    }
-
-    private func animateShowScreen() {
-
-        dimmedView.alpha = 0
-        UIView.animate(withDuration: 0.4) {
-            self.dimmedView.alpha = self.maxDimmedAlpha
-        }
-
-        UIView.animate(withDuration: 0.3) {
-            self.containerViewBottomConstraint?.constant = 0
-            self.view.layoutIfNeeded()
-        }
-
-    }
-
-    private func animateDismissScreen() {
-
-        UIView.animate(withDuration: 0.4) {
-            self.dimmedView.alpha = 0
-        } completion: { _ in
-            self.dismiss(animated: false)
-        }
-
-        UIView.animate(withDuration: 0.3) {
-            self.containerViewBottomConstraint?.constant = self.currentContainerHeight
-            self.view.layoutIfNeeded()
-        }
 
     }
 
