@@ -18,8 +18,12 @@ final class Before15TestVC: BaseTestVC {
     
 }
 
-final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDelegate where ContainerVC: UIViewController {
-
+final class SheetContainVC<ContainerVC>: UIViewController,
+                                         UIGestureRecognizerDelegate,
+                                         UIViewControllerTransitioningDelegate,
+                                         SheetAnimationProtocol
+where ContainerVC: UIViewController {
+    
     // MARK: - Public Access
 
     var allowFullHeight: Bool = true
@@ -50,6 +54,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
     // MARK: - UI Property
 
     private var containerViewHeightConstraint: NSLayoutConstraint?
+    private var containerViewBottomConstraint: NSLayoutConstraint?
     private let indicatorView: UIView = {
         let view: UIView = UIView()
         view.backgroundColor = .init(netHex: 0xCAC9CF)
@@ -60,7 +65,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
     private lazy var dimmedView: UIView = {
         let view: UIView = UIView()
         view.backgroundColor = .black
-        view.alpha = maxDimmedAlpha
+        view.alpha = 0
         return view
     }()
     private let containerVC: ContainerVC
@@ -84,6 +89,7 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
         self.containerVC = containerVC
         self.defaultHeight = defaultHeight
         super.init(nibName: nil, bundle: nil)
+        transitioningDelegate = self
         modalPresentationStyle = .overCurrentContext
         containerVC.view.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
     }
@@ -97,6 +103,13 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
         setupUI()
         setupGesture()
         registerNotification()
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard containerViewBottomConstraint?.constant != 0 else { return }
+        dimmedView.alpha = maxDimmedAlpha
+        containerViewBottomConstraint?.constant = 0
     }
 
     // MARK: - Action
@@ -156,9 +169,10 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
 
         containerVC.view
             .mLayChain(pin: .horizontal())
-            .mLayChain(.bottom, .equal, view)
 
         containerViewHeightConstraint = containerVC.view.mLay(.height, defaultHeight)
+        containerViewBottomConstraint = containerVC.view.mLay(.bottom, .equal, view, constant: maxContainerHeight)
+        view.layoutIfNeeded()
     }
 
     private func setupGesture() {
@@ -256,4 +270,81 @@ final class SheetContainVC<ContainerVC>: UIViewController, UIGestureRecognizerDe
         return false
     }
 
+    // MARK: - UIViewControllerTransitioningDelegate
+    
+    func animationController(forPresented presented: UIViewController, presenting: UIViewController, source: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        return SheetShowAnimation()
+    }
+    
+    func animationController(forDismissed dismissed: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        return SheetDismissAnimation()
+    }
+    
+    // MARK: - SheetAnimationProtocol
+    
+    func animationShow(with duration: TimeInterval, completion: ((Bool) -> Void)?) {
+        
+        self.containerViewBottomConstraint?.constant = 0
+        self.view.setNeedsUpdateConstraints()
+        
+        UIView.animate(withDuration: duration, animations: {
+            self.dimmedView.alpha = self.maxDimmedAlpha
+            self.view.layoutIfNeeded()
+        }, completion: completion)
+    }
+    
+    func animationDismiss(with duration: TimeInterval, completion: ((Bool) -> Void)?) {
+        
+        self.containerViewBottomConstraint?.constant = self.maxContainerHeight
+        self.view.setNeedsUpdateConstraints()
+
+        UIView.animate(withDuration: duration, delay: 0, options: [.curveEaseOut], animations: {
+            self.dimmedView.alpha = 0
+            self.view.layoutIfNeeded()
+        }, completion: completion)
+    }
+    
+}
+
+private protocol SheetAnimationProtocol: UIViewController {
+    
+    func animationShow(with duration: TimeInterval, completion: ((Bool) -> Void)?)
+    func animationDismiss(with duration: TimeInterval, completion: ((Bool) -> Void)?)
+    
+}
+
+private final class SheetShowAnimation: NSObject, UIViewControllerAnimatedTransitioning {
+    
+    func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
+        return 0.3
+    }
+
+    func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
+        let containerView = transitionContext.containerView
+        guard let toVC = transitionContext.viewController(forKey: .to) as? SheetAnimationProtocol else { return }
+        containerView.addSubview(toVC.view)
+        toVC.view.frame.origin = CGPoint(x: 0, y: 0)
+        toVC.animationShow(with: transitionDuration(using: transitionContext)) { finished in
+            transitionContext.completeTransition(true)
+        }
+    }
+    
+}
+
+private final class SheetDismissAnimation: NSObject, UIViewControllerAnimatedTransitioning {
+
+    func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
+        return 0.3
+    }
+
+    func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
+        let containerView = transitionContext.containerView
+        guard let fromVC = transitionContext.viewController(forKey: .from) as? SheetAnimationProtocol else { return }
+        containerView.addSubview(fromVC.view)
+        fromVC.view.frame.origin = CGPoint(x: 0, y: 0)
+        fromVC.animationDismiss(with: transitionDuration(using: transitionContext)) { finished in
+            transitionContext.completeTransition(true)
+        }
+    }
+    
 }
